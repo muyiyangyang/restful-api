@@ -27,12 +27,12 @@ from hosts.models import MonMem
 #++++++++++++++++++++++++++++++++
 #            log ^_^
 #++++++++++++++++++++++++++++++++
-taolog = logging.getLogger('taocloud')
-taolog.setLevel(logging.DEBUG)
-taolog_handler = logging.StreamHandler()
+serlog = logging.getLogger('server')
+serlog.setLevel(logging.DEBUG)
+serlog_handler = logging.StreamHandler()
 formatter = logging.Formatter('[%(asctime)s] %(name)s:%(levelname)s: %(message)s')
-taolog_handler.setFormatter(formatter)
-taolog.addHandler(taolog_handler)
+serlog_handler.setFormatter(formatter)
+serlog.addHandler(serlog_handler)
 
 _____NEW_RPC_____ = 0
 class RPCClient(object):
@@ -89,40 +89,40 @@ def ctask_rpc(self, arg, ip):
 
 _____DEFINE_SYN_ASYN_RPC_API_____ = 0
 #Synchronous RPC interface
-def tao_rpc_sync(arg, ip):
-    print "tao_rpc_sync: now excute task."
+def ser_rpc_sync(arg, ip):
+    print "ser_rpc_sync: now excute task."
     ret = ctask_rpc(arg, ip)
     return ret
 
 #Asynchronous RPC interface
-def tao_rpc_asyn(arg, ip):
-    print "tao_rpc_asyn: now excute task."
+def ser_rpc_asyn(arg, ip):
+    print "ser_rpc_asyn: now excute task."
     task_handle = ctask_rpc.delay(arg, ip)
     
     print task_handle
     return task_handle
 
-def tao_host_alive(ip):
-    ret = tao_rpc_sync('DETACT_HOST', ip)
+def ser_host_alive(ip):
+    ret = ser_rpc_sync('DETACT_HOST', ip)
 
     if (ret == 'HOST_ALIVE'):
         return True
     else:
         return False
 
-def tao_exc_cmd_timeconsuming(cmdline, ip):
+def ser_exc_cmd_timeconsuming(cmdline, ip):
     '''
     excute cmd which is time-consuming on remote node, 
     you can't get result soon but a result handle instead.
     '''
-    ret_handle = tao_rpc_asyn(cmdline, ip)
+    ret_handle = ser_rpc_asyn(cmdline, ip)
     return ret_handle
 
-def tao_exc_cmd_instant(cmdline, ip):
+def ser_exc_cmd_instant(cmdline, ip):
     '''
     excute cmd on remote node and you can get result soon.
     '''
-    ret = tao_rpc_sync(cmdline, ip)
+    ret = ser_rpc_sync(cmdline, ip)
     return ret
 
 _____DEFINE_NORMAL_TOOL_API_____ = 0
@@ -131,7 +131,7 @@ _____DEFINE_NORMAL_TOOL_API_____ = 0
 #the reason to do this is you don't know disk's logic name is '/dev/sda' or '/dev/sdb'...
 #you can solve this problem by disk's guid/wwn, the unique number, just like a primary key in data base.
 
-def tao_get_logic_disk_list(lsblk):
+def ser_get_logic_disk_list(lsblk):
     '''
     IN:
     [root@hostname home]# lsblk
@@ -163,33 +163,33 @@ def tao_get_logic_disk_list(lsblk):
     return ret
         
 
-def tao_collect_disk_logic_info(hostid, hostip):
+def ser_collect_disk_logic_info(hostid, hostip):
     '''
     you need run this step after the host's reboot.
     '''
-    lsblk_info = tao_exc_cmd_instant('lsblk', hostip)
+    lsblk_info = ser_exc_cmd_instant('lsblk', hostip)
 
-    name_list = tao_get_logic_disk_list(lsblk_info)
+    name_list = ser_get_logic_disk_list(lsblk_info)
     if (len(name_list) == 0):
         return (0)
-    taolog.debug("tao_collect_disk_logic_info:" + str(name_list))
+    serlog.debug("ser_collect_disk_logic_info:" + str(name_list))
 
     for name in name_list:
         device_name = '/dev/' + name
         cmd = "smartctl -a " + device_name + " | grep 'Logical Unit id'"
         
-        ret = tao_exc_cmd_instant(cmd, hostip)
+        ret = ser_exc_cmd_instant(cmd, hostip)
         if (len(ret) == 0):
             continue
 
         #ret :  'Logical Unit id:      0x5000cca070863e0c'
         guid = ret[24:40] #'5000cca070863e0c'
 
-        taolog.debug("tao_collect_disk_logic_info:" + "guid = " + guid)
+        serlog.debug("ser_collect_disk_logic_info:" + "guid = " + guid)
 
         disks = Disk.objects.filter(host_id=hostid, wwn=guid)
         if (len(disks) != 1):
-            taolog.debug("tao_collect_disk_logic_info:" + "host_id="+str(hostid)+"name="+name)
+            serlog.debug("ser_collect_disk_logic_info:" + "host_id="+str(hostid)+"name="+name)
             continue
         
         disk = disks[0]
@@ -202,9 +202,9 @@ def tao_collect_disk_logic_info(hostid, hostip):
     return (0)
 
 @shared_task(bind=True)
-def tao_collect_disk_hardware_info(self, hostid, hostip):
+def ser_collect_disk_hardware_info(self, hostid, hostip):
     #colletc disk hardware info.
-    ret = tao_exc_cmd_instant('bash get_drive_info.sh', hostip)
+    ret = ser_exc_cmd_instant('bash get_drive_info.sh', hostip)
     hardware_info = ret[108:]
     print hardware_info
     disk_num = hardware_info.count('\n') + 1
@@ -238,13 +238,13 @@ def tao_collect_disk_hardware_info(self, hostid, hostip):
     return (0)
     
 @shared_task(bind=True)
-def taocloud_collect_disk_info(self, hostid, hostip):
-    tao_collect_disk_hardware_info(hostid, hostip)
-    tao_collect_disk_logic_info(hostid, hostip)
+def server_collect_disk_info(self, hostid, hostip):
+    ser_collect_disk_hardware_info(hostid, hostip)
+    ser_collect_disk_logic_info(hostid, hostip)
     return (0)
 
 
-def tao_save_nic_info(hostid, hostip, nic):
+def ser_save_nic_info(hostid, hostip, nic):
     line = nic.count('\n')
     if (line < 6):
         print "get nic info failed."
@@ -252,7 +252,7 @@ def tao_save_nic_info(hostid, hostip, nic):
 
     nicinfo = {'host_id':hostid, 'ip':'', 'netmask':'', 'gateway':'', 'mac':''}
 
-def tao_save_gen_info(hostid, geninfo):
+def ser_save_gen_info(hostid, geninfo):
     '''
     save general info, like power status.
     '''
@@ -284,7 +284,7 @@ def tao_save_gen_info(hostid, geninfo):
         print "gen_info serializer is unvalid."
         print serializer
 
-def tao_save_cpu_info(hostid, cpuinfo):
+def ser_save_cpu_info(hostid, cpuinfo):
     '''
     [Cpu]
     Cpu Number = 6
@@ -336,13 +336,13 @@ def tao_save_cpu_info(hostid, cpuinfo):
 
     
 @shared_task(bind=True)
-def tao_collect_ipmi_info(self, hostid, hostip):
+def ser_collect_ipmi_info(self, hostid, hostip):
     '''
     [General] [Network] [Board] [Cpu] [Memory] [Fan] [VBAT] [User]
     1 save host info( power status...)
     2 save cpu info 
     '''
-    r = tao_exc_cmd_instant('cat ipmiresult.txt', hostip)
+    r = ser_exc_cmd_instant('cat ipmiresult.txt', hostip)
     
     #network
     pgen   = r.find('[General]')
@@ -353,10 +353,10 @@ def tao_collect_ipmi_info(self, hostid, hostip):
     pfan   = r.find('[Fan]')
     
     general = r[pgen:pnet - 2]
-    tao_save_gen_info(hostid, general)
+    ser_save_gen_info(hostid, general)
     
     cpu = r[pcpu:pmem - 2]
-    tao_save_cpu_info(hostid, cpu)
+    ser_save_cpu_info(hostid, cpu)
     
     return (0)
     
@@ -366,7 +366,7 @@ g_netmask = {8:  "255.0.0.0",
              24: "255.255.255.0"}
 
 @shared_task(bind=True)
-def tao_collect_nic_info_from_host(self, hostid, hostip):
+def ser_collect_nic_info_from_host(self, hostid, hostip):
     '''
     [root@wangchao ~]# ip a 
     1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN 
@@ -384,8 +384,8 @@ def tao_collect_nic_info_from_host(self, hostid, hostip):
     '''
     #get 'ip addr'
     r = ""
-    r = tao_exc_cmd_instant('ip addr', hostip)
-    taolog.debug("get ip a :"+r)
+    r = ser_exc_cmd_instant('ip addr', hostip)
+    serlog.debug("get ip a :"+r)
     
     #get nic info and save to database by loop
     #nic_num = r.count('link/ether')
@@ -443,12 +443,12 @@ def tao_collect_nic_info_from_host(self, hostid, hostip):
             #inet 192.168.1.119/
             ip = tmp[5:pos_mask]
             nic['ip'] = ip
-            taolog.debug("find ip: "+ip)
+            serlog.debug("find ip: "+ip)
             
             prefix = int(tmp[pos_mask + 1: pos_mask + 3])
             nic['netmask'] = g_netmask[prefix]
 
-        taolog.debug(nic)
+        serlog.debug(nic)
         if (nic.has_key('mac')):
             query_list = Nic.objects.filter(mac=nic['mac'])
             if (len(query_list) == 1):
@@ -464,13 +464,13 @@ def tao_collect_nic_info_from_host(self, hostid, hostip):
     
     return (0)
 
-def tao_collect_hardware_info(hostid, hostip):
+def ser_collect_hardware_info(hostid, hostip):
     #co disk
-    ret = taocloud_collect_disk_info.delay(hostid, hostip)
+    ret = server_collect_disk_info.delay(hostid, hostip)
     #co ipmi
-    ret = tao_collect_ipmi_info.delay(hostid, hostip)
+    ret = ser_collect_ipmi_info.delay(hostid, hostip)
 
-    ret = tao_collect_nic_info_from_host.delay(hostid, hostip)
+    ret = ser_collect_nic_info_from_host.delay(hostid, hostip)
     
     return (0)
 
@@ -479,7 +479,7 @@ def tao_collect_hardware_info(hostid, hostip):
 
 _____DEFINE_MONITOR_____ = 0
 #monitor
-def taocloud_mon_save_cpu(reclist, hostid):
+def server_mon_save_cpu(reclist, hostid):
     info_cpu = {'host_id':0,
                 'name':"",
                 'mon_type':"",
@@ -504,12 +504,12 @@ def taocloud_mon_save_cpu(reclist, hostid):
             serializer.save()
         else:
             print serializer.errors
-            print "taocloud_mon_save_cpu: serializer is not valid."
+            print "server_mon_save_cpu: serializer is not valid."
 
-def taocloud_mon_save_diskspace(reclist, hostid):
+def server_mon_save_diskspace(reclist, hostid):
     pass
 
-def taocloud_mon_save_mem(reclist, hostid):
+def server_mon_save_mem(reclist, hostid):
     info_mem = {'host_id':0,
                 'name':"",
                 'mon_type':"",
@@ -538,12 +538,12 @@ def taocloud_mon_save_mem(reclist, hostid):
             serializer.save()
         else:
             print serializer.errors
-            print "taocloud_mon_save_mem: serializer is not valid."
+            print "server_mon_save_mem: serializer is not valid."
 
-def taocloud_mon_save_network(reclist, hostid):
+def server_mon_save_network(reclist, hostid):
     pass
 
-def taocloud_mon_save_diskio(reclist, hostid):
+def server_mon_save_diskio(reclist, hostid):
     info_diskio = {'disk_id':0,
                    'name':"",
                    'mon_type':"",
@@ -559,10 +559,10 @@ def taocloud_mon_save_diskio(reclist, hostid):
 
     for diskio in reclist:
         #get disk_id by 'host_id' and 'disk name'(sda ... )
-        taolog.debug("taocloud_mon_save_diskio:"+"host_id="+str(hostid)+" disk_name="+diskio['id'])
+        serlog.debug("server_mon_save_diskio:"+"host_id="+str(hostid)+" disk_name="+diskio['id'])
         disk = Disk.objects.filter(host_id=hostid, disk_name=diskio['id'])
         if (len(disk) != 1):
-            print "taocloud_mon_save_diskio: query disk info failed."
+            print "server_mon_save_diskio: query disk info failed."
             continue
         
         #print disk[0]
@@ -593,19 +593,19 @@ def taocloud_mon_save_diskio(reclist, hostid):
             serializer.save()
         else:
             print serializer.errors
-            print "taocloud_mon_save_diskio: serializer is not valid."
+            print "server_mon_save_diskio: serializer is not valid."
         
 
 @shared_task(bind=True)
-def taocloud_mon_process_data(self, data):
+def server_mon_process_data(self, data):
     try:
         ip = data['host_ip']
-        print "taocloud_mon_process_data: get ip"
+        print "server_mon_process_data: get ip"
         print ip
         host = Host.objects.get(ip=ip)
         hostid = host.host_id
     except Host.DoesNotExist:
-        print "taocloud_mon_process_data: get host id by ip failed."
+        print "server_mon_process_data: get host id by ip failed."
 
     #print data
     data_cpu = data['cpu.usage']
@@ -616,28 +616,28 @@ def taocloud_mon_process_data(self, data):
     #data_network = request.data['network.size']
     #data_disk_space = request.data['disk.size']
     
-    taocloud_mon_save_cpu(data_cpu, hostid)
-    taocloud_mon_save_mem(data_mem, hostid)
-    taocloud_mon_save_diskio(data_disk_io, hostid)
+    server_mon_save_cpu(data_cpu, hostid)
+    server_mon_save_mem(data_mem, hostid)
+    server_mon_save_diskio(data_disk_io, hostid)
 
     #not need currently.
-    #taocloud_mon_save_diskspace(reclist, diskid)
-    #taocloud_mon_save_network(reclist, nicid)
+    #server_mon_save_diskspace(reclist, diskid)
+    #server_mon_save_network(reclist, nicid)
     return (0)
 
-def taocloud_mon_save_allinfo(data):
-    taocloud_mon_process_data.delay(data)
+def server_mon_save_allinfo(data):
+    server_mon_process_data.delay(data)
     return (0)
 
 _____DEFINE_MON_DISKIO_____ = 0
-def taocloud_mon_get_diskio_disks(words):
+def server_mon_get_diskio_disks(words):
     '''
     1-1,2,_   ==  [host_id]-[disk_id],[disk_id],_
     '''
     dic = {'host_id':'', 'disk_list':[]}
     pos_hostid = words.find('-')
     if (pos_hostid == -1):
-        print "taocloud_mon_get_diskio_disks: get pos_hostid failed."
+        print "server_mon_get_diskio_disks: get pos_hostid failed."
         return ({})
     
     hostid = words[0:pos_hostid]
@@ -651,7 +651,7 @@ def taocloud_mon_get_diskio_disks(words):
     
     return dic
 
-def taocloud_mon_get_diskio_orderlist(diskstr):
+def server_mon_get_diskio_orderlist(diskstr):
     '''
     diskstr : 1-1,2,_2-1,2,_
 
@@ -669,14 +669,14 @@ def taocloud_mon_get_diskio_orderlist(diskstr):
         word = tmp[0:pos_end + 1]
         
         #dic :  {'host_id':'', 'disk_list':[]}
-        dic = taocloud_mon_get_diskio_disks(word)
+        dic = server_mon_get_diskio_disks(word)
         order_list.append(dic)
 
         tmp = tmp[pos_end + 1:]
     
     return order_list
 
-def taocloud_mon_get_diskio_orderlist_ex(diskstr):
+def server_mon_get_diskio_orderlist_ex(diskstr):
     '''
     diskstr : 1-2-2-3-1-4-2-5-3-6-
     This string means : (host id 1, disk id 2) - (host id 2, disk id 3) - ...
@@ -688,7 +688,7 @@ def taocloud_mon_get_diskio_orderlist_ex(diskstr):
     
     array_len = len(var_array)
     if (array_len % 2 != 0):
-        print "taocloud_mon_get_diskio_orderlist_ex: diskstr is error."
+        print "server_mon_get_diskio_orderlist_ex: diskstr is error."
 
     tmp = {}
     for i in range(0, array_len, 2):
@@ -706,7 +706,7 @@ def taocloud_mon_get_diskio_orderlist_ex(diskstr):
 
     return ret
 
-def taocloud_mon_get_diskio_orderlist_all():
+def server_mon_get_diskio_orderlist_all():
     # <QuerySet [{u'host_id': 13L}, {u'host_id': 15L}, {u'host_id': 16L}]>
     hostid_set = Host.objects.all().values("host_id")
     ret = []
@@ -721,7 +721,7 @@ def taocloud_mon_get_diskio_orderlist_all():
 
     return ret
 
-def taocloud_mon_get_diskio_orderlist_by_host(diskstr):
+def server_mon_get_diskio_orderlist_by_host(diskstr):
     host_list = re.findall(r"\d+", diskstr)
     ret = []
     for h in host_list:
@@ -734,7 +734,7 @@ def taocloud_mon_get_diskio_orderlist_by_host(diskstr):
 
     return ret
 
-def taocloud_mon_diskio_get_records(hostid, diskid, datarange, number, curtime):
+def server_mon_diskio_get_records(hostid, diskid, datarange, number, curtime):
     '''
     curtime: eg. 1483669284874
     return a record list. len = number. if data is not enough, use zero value.
@@ -767,7 +767,7 @@ def taocloud_mon_diskio_get_records(hostid, diskid, datarange, number, curtime):
         
         rec_len = len(disk_records)
         if (rec_len == 0):
-            print "taocloud_mon_diskio_get_records: get records failed when number is 1."
+            print "server_mon_diskio_get_records: get records failed when number is 1."
             return ([])
 
         ret_list = []
@@ -778,12 +778,12 @@ def taocloud_mon_diskio_get_records(hostid, diskid, datarange, number, curtime):
     else:
         return ([])
 
-def taocloud_mon_diskio_scan_orderlist(orderlist, datarange, num, curtime):
+def server_mon_diskio_scan_orderlist(orderlist, datarange, num, curtime):
     '''
     order_list --> [{'host_id': 1, 'disk_list': [1, 2]}, {'host_id': 2, 'disk_list': [1, 3]}]
     '''
     if (len(orderlist) == 0):
-        print "taocloud_mon_diskio_scan_reclist: size of orderlist is 0"
+        print "server_mon_diskio_scan_reclist: size of orderlist is 0"
         return ([])
     
     diskrecslist = []
@@ -795,7 +795,7 @@ def taocloud_mon_diskio_scan_orderlist(orderlist, datarange, num, curtime):
             continue
         
         for disk in disklist:
-            diskrecs = taocloud_mon_diskio_get_records(hostid, disk, datarange, num, curtime)
+            diskrecs = server_mon_diskio_get_records(hostid, disk, datarange, num, curtime)
             #diskrecs is a list.
             if (len(diskrecs) == 0):
                 continue
@@ -804,18 +804,18 @@ def taocloud_mon_diskio_scan_orderlist(orderlist, datarange, num, curtime):
 
     return diskrecslist
 
-def taocloud_mon_diskio_calculate_mondata(mondatalist, data_type):
+def server_mon_diskio_calculate_mondata(mondatalist, data_type):
     '''
     calculate data from diffrent disks. or maybe there's only 1 disk's data.
     
     data_type: 'iops' 'bandwidth' 'await'
     '''
 
-    print "taocloud_mon_diskio_calculate_mondata"
+    print "server_mon_diskio_calculate_mondata"
     print mondatalist
     
     if (len(mondatalist) == 0):
-        print "taocloud_mon_diskio_calculate_mondata: mondatalist len is 0."
+        print "server_mon_diskio_calculate_mondata: mondatalist len is 0."
         return (0)
 
     minlistlen = len(mondatalist[0][data_type+'_read'])
@@ -880,7 +880,7 @@ def taocloud_mon_diskio_calculate_mondata(mondatalist, data_type):
 
     return (0)
     
-def taocloud_mon_diskio_packagdata(rec_list, data_type):
+def server_mon_diskio_packagdata(rec_list, data_type):
     '''
     discription : pick monitor data by type.
     
@@ -920,45 +920,45 @@ def taocloud_mon_diskio_packagdata(rec_list, data_type):
 
     return (0)
 
-def taocloud_mon_diskio_collectpkgs(diskrecslist, montype):
+def server_mon_diskio_collectpkgs(diskrecslist, montype):
     datas = []
     for diskrecs in diskrecslist:
-        data = taocloud_mon_diskio_packagdata(diskrecs, montype)
+        data = server_mon_diskio_packagdata(diskrecs, montype)
         datas.append(data)
 
     return datas
 
-def taocloud_mon_diskio_process(montype, datarange, recnum, diskstr, curtime):
+def server_mon_diskio_process(montype, datarange, recnum, diskstr, curtime):
     
     # order_list --> [{'host_id': 1, 'disk_list': [1, 2]}, {'host_id': 2, 'disk_list': [1, 3]}]
-    #order_list = taocloud_mon_get_diskio_orderlist(diskstr)
+    #order_list = server_mon_get_diskio_orderlist(diskstr)
     if (diskstr == 'all'):
         #/all/
-        order_list = taocloud_mon_get_diskio_orderlist_all()
+        order_list = server_mon_get_diskio_orderlist_all()
     elif (diskstr[0] == 'h'):
         #/h-1-3-2-6   host id
-        order_list = taocloud_mon_get_diskio_orderlist_by_host(diskstr)
+        order_list = server_mon_get_diskio_orderlist_by_host(diskstr)
     else:
         #d-1-2-2-5-4-2-    hostid-diskid
-        order_list = taocloud_mon_get_diskio_orderlist_ex(diskstr)
+        order_list = server_mon_get_diskio_orderlist_ex(diskstr)
         
     print order_list
 
-    diskrecslist = taocloud_mon_diskio_scan_orderlist(order_list, datarange, recnum, curtime)
+    diskrecslist = server_mon_diskio_scan_orderlist(order_list, datarange, recnum, curtime)
 
-    mondatalist = taocloud_mon_diskio_collectpkgs(diskrecslist, montype)
+    mondatalist = server_mon_diskio_collectpkgs(diskrecslist, montype)
     
-    ret_data = taocloud_mon_diskio_calculate_mondata(mondatalist, montype)
+    ret_data = server_mon_diskio_calculate_mondata(mondatalist, montype)
 
     return ret_data
 
 _____DEFINE_MON_CPU_____ = 0
 
-def taocloud_mon_get_hostid_by_string(hoststr):
+def server_mon_get_hostid_by_string(hoststr):
     hostid_list = re.findall(r"\d+", hoststr)
     return hostid_list
 
-def taocloud_mon_get_list_minsize(lists):
+def server_mon_get_list_minsize(lists):
     '''
     ARG: [[...], [...], ...]
     '''
@@ -974,7 +974,7 @@ def taocloud_mon_get_list_minsize(lists):
 
     return minsize
 
-def taocloud_mon_get_mintime(datarange, recnum, curtime):
+def server_mon_get_mintime(datarange, recnum, curtime):
     if (recnum == 1):
         time_min = curtime - 15*1000
     else:
@@ -982,21 +982,21 @@ def taocloud_mon_get_mintime(datarange, recnum, curtime):
 
     return time_min
 
-def taocloud_mon_cpu_process(datarange, recnum, hoststr, curtime):
+def server_mon_cpu_process(datarange, recnum, hoststr, curtime):
     #get host id
     if (hoststr == 'all'):
         # <QuerySet [{u'host_id': 13L}, {u'host_id': 15L}, {u'host_id': 16L}]>
         hostid_set = Host.objects.all().values("host_id")
-        hostid_list = taocloud_mon_get_hostid_by_string(str(hostid_set))
+        hostid_list = server_mon_get_hostid_by_string(str(hostid_set))
     else:
-        hostid_list = taocloud_mon_get_hostid_by_string(hoststr)
+        hostid_list = server_mon_get_hostid_by_string(hoststr)
 
     cpurecslist = []
 
     for hostid in hostid_list:
         #data range
         #every 15s agent post monitor data.
-        time_min = taocloud_mon_get_mintime(datarange, recnum, curtime)
+        time_min = server_mon_get_mintime(datarange, recnum, curtime)
         
         cpurecs = MonCpu.objects.filter(host_id=hostid, time__gte=time_min)
         if (len(cpurecs) == 0):
@@ -1006,7 +1006,7 @@ def taocloud_mon_cpu_process(datarange, recnum, hoststr, curtime):
         if (recnum == 1):
             rec_len = len(cpurecs)
             if (rec_len == 0):
-                print "taocloud_mon_cpu_process: rec_len is 0."
+                print "server_mon_cpu_process: rec_len is 0."
                 continue
             v_allused = 100.00 - cpurecs[rec_len - 1].idle_average
             v_allused = round(v_allused, 2)
@@ -1023,7 +1023,7 @@ def taocloud_mon_cpu_process(datarange, recnum, hoststr, curtime):
         cpurecslist.append(v_percent_list)
 
     #cpurecslist --> [[...], [...], ...]
-    lstminsize = taocloud_mon_get_list_minsize(cpurecslist)
+    lstminsize = server_mon_get_list_minsize(cpurecslist)
 
     retlist = []
 
@@ -1037,21 +1037,21 @@ def taocloud_mon_cpu_process(datarange, recnum, hoststr, curtime):
     ret = {"cpu":retlist}
     return ret
 
-def taocloud_mon_mem_process(datarange, recnum, hoststr, curtime):
+def server_mon_mem_process(datarange, recnum, hoststr, curtime):
     #get host id
     if (hoststr == 'all'):
         # <QuerySet [{u'host_id': 13L}, {u'host_id': 15L}, {u'host_id': 16L}]>
         hostid_set = Host.objects.all().values("host_id")
-        hostid_list = taocloud_mon_get_hostid_by_string(str(hostid_set))
+        hostid_list = server_mon_get_hostid_by_string(str(hostid_set))
     else:
-        hostid_list = taocloud_mon_get_hostid_by_string(hoststr)
+        hostid_list = server_mon_get_hostid_by_string(hoststr)
 
     recslist = []
 
     for hostid in hostid_list:
         #data range
         #every 15s agent post monitor data.
-        time_min = taocloud_mon_get_mintime(datarange, recnum, curtime)
+        time_min = server_mon_get_mintime(datarange, recnum, curtime)
         
         memrecs = MonMem.objects.filter(host_id=hostid, time__gte=time_min)
         if (len(memrecs) == 0):
@@ -1061,7 +1061,7 @@ def taocloud_mon_mem_process(datarange, recnum, hoststr, curtime):
         if (recnum == 1):
             rec_len = len(memrecs)
             if (rec_len == 0):
-                print "taocloud_mon_mem_process: rec_len is 0."
+                print "server_mon_mem_process: rec_len is 0."
                 continue
             v_percent = memrecs[rec_len - 1].percent
             v_time = memrecs[rec_len - 1].time
@@ -1073,7 +1073,7 @@ def taocloud_mon_mem_process(datarange, recnum, hoststr, curtime):
         recslist.append(v_percent_list)
 
     #mem recslist --> [[...], [...], ...]
-    lstminsize = taocloud_mon_get_list_minsize(recslist)
+    lstminsize = server_mon_get_list_minsize(recslist)
 
     retlist = []
 
@@ -1116,7 +1116,7 @@ def tc_get_uuid_by_blkid(blkid):
 
     return uuid
 
-def taocloud_job_init_disk(args):
+def server_job_init_disk(args):
     '''
     IN: eg  {"disk_id": 1}
     '''
@@ -1127,40 +1127,40 @@ def taocloud_job_init_disk(args):
     hostip = host.ip
 
     if (disk.mounted == True):
-        print "taocloud_job_init_disk: you must umount the disk first."
+        print "server_job_init_disk: you must umount the disk first."
         return (0)
         
 
     #formate disk
     disk_fullname = '/dev/' + diskname  #  /dev/sda
     fmtcmd = 'mkfs.xfs -f ' + disk_fullname #  mkfs.xfs -f /dev/sda
-    ret = tao_exc_cmd_instant(fmtcmd, hostip)
+    ret = ser_exc_cmd_instant(fmtcmd, hostip)
 
     disk.formated = True
 
     #get uuid
     blkidcmd = 'blkid ' + disk_fullname  #  blkid /dev/sda
-    ret = tao_exc_cmd_instant(blkidcmd, hostip)
+    ret = ser_exc_cmd_instant(blkidcmd, hostip)
 
     print "print blkid ret."
     print ret
 
     uuid = tc_get_uuid_by_blkid(ret)
     if (uuid == ""):
-        print "taocloud_job_init_disk: get uuid error."
+        print "server_job_init_disk: get uuid error."
         return (0)
     disk.fmt_uuid = uuid
 
     #mount
     mnt_point = '/data/' + uuid
-    ret = tao_exc_cmd_instant('mkdir -p ' + mnt_point, hostip)
+    ret = ser_exc_cmd_instant('mkdir -p ' + mnt_point, hostip)
     mnt = 'mount UUID="' + uuid + '" ' + mnt_point
-    ret = tao_exc_cmd_instant(mnt, hostip)
+    ret = ser_exc_cmd_instant(mnt, hostip)
     
     #write /etc/fstab
     #UUID=4ea81b96-92ef-44d0-9bbd-9f67dc58db11  /mnt/disk01    xfs defaults    0 0
     fstab = 'echo "UUID=' +uuid+' '+mnt_point+' '+'xfs defaults 0 0" >> /etc/fstab'
-    ret = tao_exc_cmd_instant(fstab, hostip)
+    ret = ser_exc_cmd_instant(fstab, hostip)
 
     disk.mounted = True
 
@@ -1171,10 +1171,10 @@ def taocloud_job_init_disk(args):
     return (0)
 
 
-def taocloud_job_formate(args):
+def server_job_formate(args):
     pass
 
-def taocloud_job_mount(args):
+def server_job_mount(args):
     '''
     IN: eg  {"disk_id": 1}
     '''
@@ -1187,23 +1187,23 @@ def taocloud_job_mount(args):
     disk_fullname = '/dev/' + diskname  #  /dev/sda
     #get uuid
     blkidcmd = 'blkid ' + disk_fullname  #  blkid /dev/sda
-    ret = tao_exc_cmd_instant(blkidcmd, hostip)
+    ret = ser_exc_cmd_instant(blkidcmd, hostip)
 
     uuid = tc_get_uuid_by_blkid(ret)
     if (uuid == ""):
-        print "taocloud_job_mount: get uuid error."
+        print "server_job_mount: get uuid error."
         return (0)
 
     #mount
     mnt_point = '/data/' + uuid
-    ret = tao_exc_cmd_instant('mkdir -p ' + mnt_point, hostip)
+    ret = ser_exc_cmd_instant('mkdir -p ' + mnt_point, hostip)
     mnt = 'mount UUID="' + uuid + '" ' + mnt_point
-    ret = tao_exc_cmd_instant(mnt, hostip)
+    ret = ser_exc_cmd_instant(mnt, hostip)
     
     #write /etc/fstab
     #UUID=4ea81b96-92ef-44d0-9bbd-9f67dc58db11  /mnt/disk01    xfs defaults    0 0
     fstab = 'echo "UUID=' +uuid+' '+mnt_point+' '+'xfs defaults 0 0" >> /etc/fstab'
-    ret = tao_exc_cmd_instant(fstab, hostip)
+    ret = ser_exc_cmd_instant(fstab, hostip)
 
     disk.mounted = True
 
@@ -1212,7 +1212,7 @@ def taocloud_job_mount(args):
     disk.save()
     return (0)
 
-def taocloud_job_umount(args):
+def server_job_umount(args):
     '''
     IN: eg  {"disk_id": 1}
     '''
@@ -1225,19 +1225,19 @@ def taocloud_job_umount(args):
     #umount
     disk_fullname = '/dev/' + diskname  #  /dev/sda
     blkidcmd = 'blkid ' + disk_fullname #blkid /dev/sda
-    ret = tao_exc_cmd_instant(blkidcmd, hostip)
+    ret = ser_exc_cmd_instant(blkidcmd, hostip)
     
     uuid = tc_get_uuid_by_blkid(ret)
     if (uuid == ""):
-        print "taocloud_job_init_disk: get uuid error."
+        print "server_job_init_disk: get uuid error."
         return (0)
 
     umnt = 'umount /data/'+uuid
-    ret = tao_exc_cmd_instant(umnt, hostip)
+    ret = ser_exc_cmd_instant(umnt, hostip)
 
     #del line contains UUID=uuid
     clear_fstab = "sed -i '/"+uuid+"/d' /etc/fstab"
-    ret = tao_exc_cmd_instant(clear_fstab, hostip)
+    ret = ser_exc_cmd_instant(clear_fstab, hostip)
 
     disk.mounted = False
     disk.status = g_disk_state_change[disk.status]['ACTION_UMOUNT']
@@ -1246,11 +1246,11 @@ def taocloud_job_umount(args):
     return (0)
 
 g_job_dic = {
-            "JOB_INIT_A_DISK"    : taocloud_job_init_disk, 
-            "JOB_FORMATE_A_DISK" : taocloud_job_formate, 
-            "JOB_MOUNT_A_DISK"   : taocloud_job_mount, 
-            "JOB_UMOUNT_A_DISK"  : taocloud_job_umount
+            "JOB_INIT_A_DISK"    : server_job_init_disk, 
+            "JOB_FORMATE_A_DISK" : server_job_formate, 
+            "JOB_MOUNT_A_DISK"   : server_job_mount, 
+            "JOB_UMOUNT_A_DISK"  : server_job_umount
             }
 
-def taocloud_job_accept(job_name, job_args):
+def server_job_accept(job_name, job_args):
     return g_job_dic[job_name](job_args)

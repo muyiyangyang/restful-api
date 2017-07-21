@@ -22,7 +22,7 @@ urlpatterns = [
     url(r'^logs/$', views.LogList.as_view(), name='log-list'),
     url(r'^logs/(?P<pk>[0-9]+)/$', views.LogDetail.as_view(), name='log-detial'),
 
-    #taocloudMonitor
+    #serverMonitor
     url(r'^monitor/$', views.MonitorView.as_view(), name='monitor'),
     url(r'^monitor/(iops)/(\d+)/(i|a)/(.*)/$', views.MonDiskIOView.as_view(), name='monitor-diskio-iops'),
     url(r'^monitor/(bandwidth)/(\d+)/(i|a)/(.*)/$', views.MonDiskIOView.as_view(), name='monitor-diskio-bandwidth'),

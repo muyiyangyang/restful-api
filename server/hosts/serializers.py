@@ -122,7 +122,7 @@ class DeviceSerializer(serializers.ModelSerializer):
         fields = ('device_id','device_name', 'style','choice','status','hosts')
 
 '''
-taocloudMonitor: [disk io] [network] [memory] [disk] [cpu]
+serverMonitor: [disk io] [network] [memory] [disk] [cpu]
 '''
 class MonDiskIOSerializer(serializers.ModelSerializer):
     class Meta:

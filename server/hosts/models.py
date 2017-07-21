@@ -216,9 +216,6 @@ class Log(models.Model):
 
 admin.site.register(Log)
 
-'''
-taocloudMonitor: [disk io] [network] [memory] [disk] [cpu]
-'''
 class MonDiskIO(models.Model):
     #record id
     rec_id = models.AutoField(primary_key=True)

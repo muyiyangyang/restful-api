@@ -14,19 +14,19 @@ from django.http import Http404
 from rest_framework.views import APIView
 
 #for celery
-from hosts.tasks import tao_host_alive
-from hosts.tasks import tao_exc_cmd_instant
-from hosts.tasks import tao_collect_hardware_info
-from hosts.tasks import taocloud_mon_save_allinfo
+from hosts.tasks import ser_host_alive
+from hosts.tasks import ser_exc_cmd_instant
+from hosts.tasks import ser_collect_hardware_info
+from hosts.tasks import server_mon_save_allinfo
 
-from hosts.tasks import tao_collect_disk_logic_info
-from hosts.tasks import tao_collect_nic_info_from_host
+from hosts.tasks import ser_collect_disk_logic_info
+from hosts.tasks import ser_collect_nic_info_from_host
 
-from hosts.tasks import taocloud_mon_diskio_process
-from hosts.tasks import taocloud_mon_cpu_process
-from hosts.tasks import taocloud_mon_mem_process
+from hosts.tasks import server_mon_diskio_process
+from hosts.tasks import server_mon_cpu_process
+from hosts.tasks import server_mon_mem_process
 
-from hosts.tasks import taocloud_job_accept
+from hosts.tasks import server_job_accept
 
 import json
 import time
@@ -161,7 +161,7 @@ class HostList(APIView):
             data=request.data
             hostip=data["ip"]
             
-            ret = tao_host_alive(hostip)
+            ret = ser_host_alive(hostip)
             if (ret == False):
                 print "add host fail!"
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -174,7 +174,7 @@ class HostList(APIView):
             host = self.get_host_obj(hostip)
             hostid = host.host_id
             
-            tao_collect_hardware_info(hostid, hostip)
+            ser_collect_hardware_info(hostid, hostip)
             
             return Response(serializer.data, status=status.HTTP_201_CREATED)
             
@@ -269,7 +269,7 @@ class DiskInfoCollector(APIView):
             print host_ip
 
             #colletc disk hardware info.
-            ret = tao_exc_cmd_instant('bash get_drive_info.sh', host_ip)
+            ret = ser_exc_cmd_instant('bash get_drive_info.sh', host_ip)
             hardware_info = ret[108:]
             print hardware_info
             disk_num = hardware_info.count('\n') + 1
@@ -428,7 +428,7 @@ class NicList(APIView):
         print request.data
         hostid = request.data['host_id']
         hostip = request.data['ip']
-        tao_collect_nic_info_from_host(hostid, hostip)
+        ser_collect_nic_info_from_host(hostid, hostip)
         return Response(status=status.HTTP_200_OK)
         '''
         serializer = NicSerializer(data=request)
@@ -572,7 +572,7 @@ class InfoCollector(APIView):
             print host_ip
 
             #colletc disk hardware info.
-            ret = tao_exc_cmd_instant('bash get_drive_info.sh', host_ip)
+            ret = ser_exc_cmd_instant('bash get_drive_info.sh', host_ip)
             hardware_info = ret[108:]
             print hardware_info
             disk_num = hardware_info.count('\n') + 1
@@ -599,7 +599,7 @@ class InfoCollector(APIView):
 
 
 '''
-taocloudMonitor's views
+serverMonitor's views
 '''
 class MonitorView(APIView):
     def get_host_obj(self, ip):
@@ -609,7 +609,7 @@ class MonitorView(APIView):
             raise Http404
     
     def post(self, request, format=None):
-        taocloud_mon_save_allinfo(request.data)
+        server_mon_save_allinfo(request.data)
         return Response(status=status.HTTP_201_CREATED)
         
 
@@ -646,12 +646,12 @@ class MonDiskIOView(APIView):
 
         rec_num = record_number_dic[get_type]
 
-        ret = taocloud_mon_diskio_process(mon_type, data_range, rec_num, disk_str, current_time)
+        ret = server_mon_diskio_process(mon_type, data_range, rec_num, disk_str, current_time)
         
         
-        #rec_list = taocloud_mon_diskio_get_records(1, 1, 120, 60, 1482283228199)
+        #rec_list = server_mon_diskio_get_records(1, 1, 120, 60, 1482283228199)
 
-        #ret_data = taocloud_mon_diskio_packagdata(rec_list, 'iops')
+        #ret_data = server_mon_diskio_packagdata(rec_list, 'iops')
         
         return Response(ret)
 
@@ -673,7 +673,7 @@ class MonCpuView(APIView):
 
         rec_num = record_number_dic[get_type]
         
-        ret = taocloud_mon_cpu_process(data_range, rec_num, host_str, current_time)
+        ret = server_mon_cpu_process(data_range, rec_num, host_str, current_time)
         return Response(ret)
         
 class MonMemView(APIView):
@@ -688,7 +688,7 @@ class MonMemView(APIView):
 
         rec_num = record_number_dic[get_type]
         
-        ret = taocloud_mon_mem_process(data_range, rec_num, host_str, current_time)
+        ret = server_mon_mem_process(data_range, rec_num, host_str, current_time)
         
         return Response(ret)
 
@@ -713,7 +713,7 @@ class JobView(APIView):
         job_name = data['job_name']
         job_args = data['job_args']
         
-        ret = taocloud_job_accept(job_name, job_args)
+        ret = server_job_accept(job_name, job_args)
 
         return Response(status=status.HTTP_200_OK)
         
